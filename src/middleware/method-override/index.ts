@@ -32,6 +32,16 @@ type MethodOverrideOptions = {
 
 const DEFAULT_METHOD_FORM_NAME = '_method'
 
+// A GET or HEAD Request cannot have a body, so the overridden request must be built without one
+const isBodylessMethod = (method: string) => /^(?:GET|HEAD)$/i.test(method)
+
+const withoutBodyHeaders = (headers: Headers) => {
+  const newHeaders = new Headers(headers)
+  newHeaders.delete('content-type')
+  newHeaders.delete('content-length')
+  return newHeaders
+}
+
 /**
  * Method Override Middleware for Hono.
  *
@@ -75,13 +85,14 @@ export const methodOverride = (options: MethodOverrideOptions): MiddlewareHandle
         const form = await clonedRequest.formData()
         const method = form.get(methodFormName)
         if (method) {
-          const newForm = await newRequest.formData()
-          newForm.delete(methodFormName)
-          const newHeaders = new Headers(clonedRequest.headers)
-          newHeaders.delete('content-type')
-          newHeaders.delete('content-length')
+          const newHeaders = withoutBodyHeaders(clonedRequest.headers)
+          let body: FormData | undefined
+          if (!isBodylessMethod(method as string)) {
+            body = await newRequest.formData()
+            body.delete(methodFormName)
+          }
           const request = new Request(c.req.url, {
-            body: newForm,
+            body,
             headers: newHeaders,
             method: method as string,
           })
@@ -94,11 +105,15 @@ export const methodOverride = (options: MethodOverrideOptions): MiddlewareHandle
         const method = params[methodFormName]
         if (method) {
           delete params[methodFormName]
-          const newParams = new URLSearchParams(params)
-          const request = new Request(newRequest, {
-            body: newParams,
-            method: method as string,
-          })
+          const request = isBodylessMethod(method)
+            ? new Request(c.req.url, {
+                headers: withoutBodyHeaders(newRequest.headers),
+                method,
+              })
+            : new Request(newRequest, {
+                body: new URLSearchParams(params),
+                method,
+              })
           return app.fetch(request, c.env, getExecutionCtx(c))
         }
       }
@@ -108,6 +123,15 @@ export const methodOverride = (options: MethodOverrideOptions): MiddlewareHandle
       const headerName = options.header
       const method = c.req.header(headerName)
       if (method) {
+        if (isBodylessMethod(method)) {
+          const newHeaders = withoutBodyHeaders(c.req.raw.headers)
+          newHeaders.delete(headerName)
+          const request = new Request(c.req.url, {
+            headers: newHeaders,
+            method,
+          })
+          return app.fetch(request, c.env, getExecutionCtx(c))
+        }
         const newHeaders = new Headers(c.req.raw.headers)
         newHeaders.delete(headerName)
         const request = new Request(c.req.raw, {
@@ -124,11 +148,13 @@ export const methodOverride = (options: MethodOverrideOptions): MiddlewareHandle
       if (method) {
         const url = new URL(c.req.url)
         url.searchParams.delete(queryName)
+        const bodyless = isBodylessMethod(method)
+        const body = bodyless ? null : c.req.raw.body
         const requestInit: RequestInit & { duplex?: 'half' } = {
-          body: c.req.raw.body,
-          headers: c.req.raw.headers,
+          body,
+          headers: bodyless ? withoutBodyHeaders(c.req.raw.headers) : c.req.raw.headers,
           method,
-          duplex: c.req.raw.body ? 'half' : undefined,
+          duplex: body ? 'half' : undefined,
         }
         const request = new Request(url.toString(), requestInit)
         return app.fetch(request, c.env, getExecutionCtx(c))
