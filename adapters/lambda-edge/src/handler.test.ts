@@ -314,6 +314,26 @@ describe('handle', () => {
     expect(res).toMatchObject({ status: '200', body: 'normal' })
   })
 
+  it('Should omit the body for a bodyless 204 response', async () => {
+    const app = new Hono()
+    app.get('/test-path', (c) => c.body(null, 204, { 'content-type': 'text/plain' }))
+    const handler = handle(app)
+
+    const res = await handler(cloudFrontEdgeEvent)
+    expect(res).toMatchObject({ status: '204' })
+    expect(res).not.toHaveProperty('body')
+    expect(res).not.toHaveProperty('bodyEncoding')
+  })
+
+  it('Should keep an empty body when the response has one', async () => {
+    const app = new Hono()
+    app.get('/test-path', (c) => c.text(''))
+    const handler = handle(app)
+
+    const res = await handler(cloudFrontEdgeEvent)
+    expect(res).toMatchObject({ status: '200', body: '' })
+  })
+
   it('Should base64 encode a compressed response with a textual content-type', async () => {
     const payload = new TextEncoder().encode('a'.repeat(100))
     const gzipped = await new Response(
