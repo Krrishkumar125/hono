@@ -14,6 +14,7 @@ describe('Method Override Middleware', () => {
         contentType: c.req.header('content-type') ?? '',
       })
     })
+    app.get('/posts', (c) => c.json({ method: c.req.method }))
 
     describe('multipart/form-data', () => {
       it('Should override POST to DELETE', async () => {
@@ -44,6 +45,18 @@ describe('Method Override Middleware', () => {
         expect(data.method).toBe('DELETE')
         expect(data.message).toBe('Hello')
         expect(data.contentType).toMatch(/^multipart\/form-data;/)
+      })
+
+      it('Should override POST to GET without forwarding the body', async () => {
+        const body = new FormData()
+        body.append('message', 'Hello')
+        body.append('_method', 'GET')
+        const res = await app.request('/posts', {
+          body,
+          method: 'POST',
+        })
+        expect(res.status).toBe(200)
+        expect(await res.json()).toEqual({ method: 'GET' })
       })
 
       it('Should override POST to PATCH - not found', async () => {
@@ -112,6 +125,18 @@ describe('Method Override Middleware', () => {
         expect(data.message).toBe('Hello')
       })
 
+      it('Should override POST to GET without forwarding the body', async () => {
+        const body = new URLSearchParams()
+        body.append('message', 'Hello')
+        body.append('_method', 'GET')
+        const res = await app.request('/posts', {
+          body,
+          method: 'POST',
+        })
+        expect(res.status).toBe(200)
+        expect(await res.json()).toEqual({ method: 'GET' })
+      })
+
       it('Should override POST to PATCH - not found', async () => {
         const form = new FormData()
         form.append('message', 'Hello')
@@ -147,6 +172,33 @@ describe('Method Override Middleware', () => {
         method: 'DELETE',
         headerValue: null,
       })
+    })
+
+    it('Should override POST to GET when the request has a body', async () => {
+      const res = await app.request('/posts', {
+        method: 'POST',
+        headers: {
+          'X-METHOD-OVERRIDE': 'GET',
+        },
+        body: 'Hello',
+      })
+      expect(res.status).toBe(200)
+      expect(await res.json()).toEqual({
+        method: 'GET',
+        headerValue: null,
+      })
+    })
+
+    it('Should override POST to HEAD when the request has a body', async () => {
+      const res = await app.request('/posts', {
+        method: 'POST',
+        headers: {
+          'X-METHOD-OVERRIDE': 'HEAD',
+        },
+        body: 'Hello',
+      })
+      expect(res.status).toBe(200)
+      expect(await res.text()).toBe('')
     })
 
     it('Should not override GET request', async () => {
@@ -203,6 +255,18 @@ describe('Method Override Middleware', () => {
       expect(await res.json()).toEqual({
         method: 'DELETE',
         body: 'message=Hello',
+        queryValue: null,
+      })
+    })
+
+    it('Should override POST to GET when the request has a body', async () => {
+      const res = await app.request('/posts?_method=get', {
+        method: 'POST',
+        body: new URLSearchParams({ message: 'Hello' }),
+      })
+      expect(res.status).toBe(200)
+      expect(await res.json()).toEqual({
+        method: 'GET',
         queryValue: null,
       })
     })
