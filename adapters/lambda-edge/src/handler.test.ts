@@ -325,6 +325,28 @@ describe('handle', () => {
     expect(res).not.toHaveProperty('bodyEncoding')
   })
 
+  it('Should omit the body for a 304 response', async () => {
+    const app = new Hono()
+    app.get('/test-path', (c) => c.body(null, 304))
+    const handler = handle(app)
+
+    const res = await handler(cloudFrontEdgeEvent)
+    expect(res).toMatchObject({ status: '304' })
+    expect(res).not.toHaveProperty('body')
+  })
+
+  it('Should omit the body for a HEAD request', async () => {
+    const app = new Hono()
+    app.get('/test-path', (c) => c.text('normal'))
+    const handler = handle(app)
+
+    const event = structuredClone(cloudFrontEdgeEvent)
+    event.Records[0].cf.request.method = 'HEAD'
+    const res = await handler(event)
+    expect(res).toMatchObject({ status: '200' })
+    expect(res).not.toHaveProperty('body')
+  })
+
   it('Should keep an empty body when the response has one', async () => {
     const app = new Hono()
     app.get('/test-path', (c) => c.text(''))
