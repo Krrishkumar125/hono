@@ -165,6 +165,15 @@ export const handle = (
 }
 
 const createResult = async (res: Response): Promise<CloudFrontResult> => {
+  // CloudFront returns 502 for a generated 204 result that includes a `body`,
+  // so a bodyless response must not set the field at all
+  if (res.body === null) {
+    return {
+      status: res.status.toString(),
+      headers: convertHeaders(res.headers),
+    }
+  }
+
   const contentEncoding = res.headers.get('content-encoding')
   const isBase64Encoded =
     isContentTypeBinary(res.headers.get('content-type') || '') ||
